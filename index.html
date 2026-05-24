@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FitLog & Shop Pro</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --accent-color: #00adb5;
+            --text-color: #eeeeee;
+            --danger-color: #ff2e63;
+            --share-color: #4caf50;
+            --timer-color: #ff9f43;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 15px;
+        }
+
+        header {
+            text-align: center;
+            padding: 10px 0;
+            border-bottom: 2px solid var(--card-bg);
+            margin-bottom: 20px;
+        }
+
+        h1 { margin: 0; color: var(--accent-color); font-size: 24px; }
+        h2 { font-size: 18px; margin-top: 0; border-bottom: 1px solid #333; padding-bottom: 5px; }
+
+        .section-card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .input-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        input {
+            background: #2d2d2d;
+            border: 1px solid #444;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 16px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        button {
+            background: var(--accent-color);
+            border: none;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button.add-btn { min-width: 60px; }
+        
+        button.action-btn {
+            width: 100%;
+            padding: 12px;
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        button.share-btn { background: var(--share-color); }
+        button.clear-btn { background: #444; font-size: 14px; margin-top: 15px;}
+
+        /* Timer UI */
+        .timer-box {
+            background: #252525;
+            border-left: 4px solid var(--timer-color);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .timer-display { font-size: 22px; font-weight: bold; color: var(--timer-color); font-family: monospace; }
+        .timer-controls button { padding: 6px 12px; font-size: 14px; background: #3a3a3a; }
+
+        ul, .log-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .item-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: #252525;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        .item-text { flex-grow: 1; margin-left: 10px; }
+        .timestamp { display: block; font-size: 11px; color: #888; margin-top: 2px; }
+        .completed { text-decoration: line-through; opacity: 0.5; }
+
+        .delete-btn {
+            background: transparent;
+            color: var(--danger-color);
+            padding: 5px 10px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>FitLog & Shop Pro</h1>
+    </header>
+
+    <div class="section-card">
+        <div class="timer-box">
+            <div>
+                <span style="display:block; font-size:12px; color:#aaa;">⏱️ REST TIMER</span>
+                <span id="timerDisplay" class="timer-display">01:00</span>
+            </div>
+            <div class="timer-controls">
+                <button id="timerStartBtn" onclick="toggleTimer()">Start</button>
+                <button onclick="resetTimer()">Reset</button>
+            </div>
+        </div>
+
+        <h2>🏋️ Workout Log</h2>
+        <div class="input-row">
+            <input type="text" id="exerciseInput" placeholder="Exercise (e.g., Squat)">
+        </div>
+        <div class="input-group">
+            <input type="number" id="setsInput" placeholder="Sets">
+            <input type="number" id="repsInput" placeholder="Reps">
+            <button class="add-btn" onclick="addWorkout()">Log</button>
+        </div>
+        <div id="workoutLogList" class="log-list"></div>
+        <button id="clearWorkoutsBtn" class="action-btn clear-btn" onclick="clearAllWorkouts()" style="display:none;">Clear Workout History</button>
+    </div>
+
+    <div class="section-card">
+        <h2>🛒 Fitness Shopping List</h2>
+        <div class="input-group">
+            <input type="text" id="shopInput" placeholder="Add grocery item...">
+            <button class="add-btn" onclick="addShopItem()">+</button>
+        </div>
+        <ul id="shoppingList"></ul>
+        <button class="action-btn share-btn" onclick="copyShoppingList()">📋 Copy Shopping List</button>
+        <button id="clearShopBtn" class="action-btn clear-btn" onclick="clearCheckedShop()" style="display:none;">Clear Checked Items</button>
+    </div>
+
+    <script>
+        let workouts = JSON.parse(localStorage.getItem('workouts')) || [];
+        let shopItems = JSON.parse(localStorage.getItem('shopItems')) || [];
+        
+        // Timer variables
+        let timerInterval = null;
+        let defaultTime = 60; 
+        let timeLeft = defaultTime;
+
+        // --- TIMER FUNCTIONS ---
+        function updateTimerDisplay() {
+            let mins = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+            let secs = (timeLeft % 60).toString().padStart(2, '0');
+            document.getElementById('timerDisplay').innerText = `${mins}:${secs}`;
+        }
+
+        function toggleTimer() {
+            const btn = document.getElementById('timerStartBtn');
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+                btn.innerText = "Start";
+            } else {
+                btn.innerText = "Pause";
+                timerInterval = setInterval(() => {
+                    if (timeLeft > 0) {
+                        timeLeft--;
+                        updateTimerDisplay();
+                    } else {
+                        clearInterval(timerInterval);
+                        timerInterval = null;
+                        btn.innerText = "Start";
+                        timeLeft = defaultTime;
+                        updateTimerDisplay();
+                        if(navigator.vibrate) navigator.vibrate([200, 100, 200]); 
+                        alert("💪 Rest over! Time for your next set!");
+                    }
+                }, 1000);
+            }
+        }
+
+        function resetTimer() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            timeLeft = defaultTime;
+            document.getElementById('timerStartBtn').innerText = "Start";
+            updateTimerDisplay();
+        }
+
+        // --- WORKOUT FUNCTIONS ---
+        function renderWorkouts() {
+            const list = document.getElementById('workoutLogList');
+            const clearBtn = document.getElementById('clearWorkoutsBtn');
+            list.innerHTML = '';
+            
+            if(workouts.length === 0) {
+                clearBtn.style.display = "none";
+            } else {
+                clearBtn.style.display = "block";
+            }
+
+            workouts.forEach((w, index) => {
+                list.innerHTML += `
+                    <div class="item-row">
+                        <div class="item-text">
+                            <strong>${w.name}</strong> - ${w.sets} sets x ${w.reps} reps
+                            <span class="timestamp">Logged: ${w.date || 'Just now'}</span>
+                        </div>
+                        <button class="delete-btn" onclick="deleteWorkout(${index})">✕</button>
+                    </div>`;
+            });
+            localStorage.setItem('workouts', JSON.stringify(workouts));
+        }
+
+        function addWorkout() {
+            const name = document.getElementById('exerciseInput').value;
+            const sets = document.getElementById('setsInput').value;
+            const reps = document.getElementById('repsInput').value;
+            
+            if(!name || !sets || !reps) return;
+            
+            const now = new Date();
+            const dateStr = now.toLocaleDateString() + ' @ ' + now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            workouts.push({ name, sets, reps, date: dateStr });
+            renderWorkouts();
+            
+            document.getElementById('exerciseInput').value = '';
+            document.getElementById('setsInput').value = '';
+            document.getElementById('repsInput').value = '';
+        }
+
+        function deleteWorkout(index) {
+            workouts.splice(index, 1);
+            renderWorkouts();
+        }
+
+        function clearAllWorkouts() {
+            if(confirm("Are you sure you want to wipe your entire workout history?")) {
+                workouts = [];
+                renderWorkouts();
+            }
+        }
+
+        // --- SHOPPING LIST FUNCTIONS ---
+        function renderShop() {
+            const list = document.getElementById('shoppingList');
+            const clearBtn = document.getElementById('clearShopBtn');
+            list.innerHTML = '';
+            
+            let hasChecked = shopItems.some(item => item.done);
+            clearBtn.style.display = hasChecked ? "block" : "none";
+
+            shopItems.forEach((item, index) => {
+                list.innerHTML += `
+                    <li class="item-row">
+                        <input type="checkbox" ${item.done ? 'checked' : ''} onclick="toggleShop(${index})" style="width: auto;">
+                        <span class="item-text ${item.done ? 'completed' : ''}">${item.text}</span>
+                        <button class="delete-btn" onclick="deleteShop(${index})">✕</button>
+                    </li>`;
+            });
+            localStorage.setItem('shopItems', JSON.stringify(shopItems));
+        }
+
+        function addShopItem() {
+            const text = document.getElementById('shopInput').value;
+            if(!text) return;
+            shopItems.push({ text, done: false });
+            renderShop();
+            document.getElementById('shopInput').value = '';
+        }
+
+        function toggleShop(index) {
+            shopItems[index].done = !shopItems[index].done;
+            renderShop();
+        }
+
+        function deleteShop(index) {
+            shopItems.splice(index, 1);
+            renderShop();
+        }
+
+        function clearCheckedShop() {
+            shopItems = shopItems.filter(item => !item.done);
+            renderShop();
+        }
+
+        // --- CLIPBOARD COPY FUNCTION ---
+        function copyShoppingList() {
+            if (shopItems.length === 0) {
+                alert("Your shopping list is empty!");
+                return;
+            }
+            
+            let textMessage = "🏋️ My Fitness Grocery List:\n";
+            shopItems.forEach(item => {
+                let status = item.done ? "[x] " : "[ ] ";
+                textMessage += `${status}${item.text}\n`;
+            });
+            
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(textMessage).then(() => {
+                    alert("📋 List copied to clipboard! Open your text app and paste it.");
+                }).catch(() => {
+                    fallbackCopy(textMessage);
+                });
+            } else {
+                fallbackCopy(textMessage);
+            }
+        }
+
+        function fallbackCopy(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";  
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                alert("📋 List copied to clipboard!");
+            } catch (err) {
+                alert("Oops, couldn't copy automatically.");
+            }
+            document.body.removeChild(textArea);
+        }
+
+        renderWorkouts();
+        renderShop();
+        updateTimerDisplay();
+    </script>
+</body>
+</html>
